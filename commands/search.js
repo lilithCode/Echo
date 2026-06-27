@@ -3,19 +3,26 @@ const { getAIResponse, ECHO_PERSONALITY } = require("../services/ai");
 const { searchWeb } = require("../services/search");
 const { getSlackDisplayName } = require("../services/utils");
 
-app.command("/echo-search", async ({ command, ack, respond }) => {
+app.command("/echo-search", async ({ command, ack }) => {
   await ack();
 
   const query = command.text.trim();
-  if (!query) return await respond("Hmm... give me a topic to search.");
+  if (!query) {
+    await app.client.chat.postEphemeral({
+      channel: command.channel_id,
+      user: command.user_id,
+      text: "Hmm... give me a topic to search.",
+    });
+    return;
+  }
 
   const userInfo = await app.client.users.info({ user: command.user_id });
   const userName = getSlackDisplayName(userInfo.user);
 
   try {
-    await respond({
-      response_type: "in_channel",
-      text: `*${userName}:* ${query}\n\n⏳ *Searching the web...*`,
+    const placeholder = await app.client.chat.postMessage({
+      channel: command.channel_id,
+      text: `*${userName} searched for:* ${query}\n\n *Searching the web...*`,
     });
 
     const liveContext = await searchWeb(query);
@@ -33,16 +40,21 @@ INSTRUCTIONS: Summarize findings. Use markdown links. Keep it cool.
       "openai/gpt-4o",
     );
 
-    await respond({
-      response_type: "in_channel",
-      replace_original: true,
-      text: `*${userName}:* ${query}\n\n*Echo:* ${answer}`,
+    await app.client.chat.delete({
+      channel: command.channel_id,
+      ts: placeholder.ts,
+    });
+
+    await app.client.chat.postMessage({
+      channel: command.channel_id,
+      text: `*${userName} searched for:* ${query}\n\n*Echo:* ${answer}`,
     });
   } catch (error) {
     console.error("[Echo] /echo-search failed:", error.message);
-    await respond({
+    await app.client.chat.postEphemeral({
+      channel: command.channel_id,
+      user: command.user_id,
       text: "Eh... my web search is acting up. Maybe try again later?",
-      replace_original: false,
     });
   }
 });

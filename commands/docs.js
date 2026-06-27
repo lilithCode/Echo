@@ -1,22 +1,29 @@
 const app = require("../app");
 const { searchDocs } = require("../services/search");
+const { getSlackDisplayName } = require("../services/utils");
 
-app.command("/echo-docs", async ({ command, ack, respond }) => {
+app.command("/echo-docs", async ({ command, ack }) => {
   await ack();
 
   const query = command.text.trim();
-  if (!query)
-    return await respond("Hmm... You didn't tell me what to look up.");
+  if (!query) {
+    await app.client.chat.postEphemeral({
+      channel: command.channel_id,
+      user: command.user_id,
+      text: "Hmm... You didn't tell me what to look up.",
+    });
+    return;
+  }
 
   const userInfo = await app.client.users.info({ user: command.user_id });
-  const userName = userInfo.user.real_name || userInfo.user.name;
-
-  await respond({
-    response_type: "in_channel",
-    text: `*${userName}:* ${query}\n\n*Searching documentation...* `,
-  });
+  const userName = getSlackDisplayName(userInfo.user);
 
   try {
+    const placeholder = await app.client.chat.postMessage({
+      channel: command.channel_id,
+      text: `*${userName} requested docs for:* ${query}\n\n *Looking through official documentation...*`,
+    });
+
     const { answer, sources } = await searchDocs(query);
 
     const sourceList =
@@ -25,16 +32,20 @@ app.command("/echo-docs", async ({ command, ack, respond }) => {
           sources.map((s) => `• [${s.title}](${s.url})`).join("\n")
         : "";
 
-    await respond({
-      response_type: "in_channel",
-      replace_original: true,
-      text: `*${userName}:* ${query}\n\n*Echo:*\n\n${answer}${sourceList}`,
+    await app.client.chat.delete({
+      channel: command.channel_id,
+      ts: placeholder.ts,
+    });
+
+    await app.client.chat.postMessage({
+      channel: command.channel_id,
+      text: `*${userName} requested docs for:* ${query}\n\n*Echo:*\n\n${answer}${sourceList}`,
     });
   } catch (error) {
-    await respond({
-      response_type: "in_channel",
-      replace_original: true,
-      text: `*${userName}:* ${query}\n\n*Echo:* I couldn't search the docs right now.`,
+    await app.client.chat.postEphemeral({
+      channel: command.channel_id,
+      user: command.user_id,
+      text: "Eh... I couldn't search the docs right now.",
     });
   }
 });

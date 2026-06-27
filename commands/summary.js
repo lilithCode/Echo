@@ -7,7 +7,7 @@ const {
   formatConversationLine,
 } = require("../services/utils");
 
-app.command("/echo-summary", async ({ command, ack, respond }) => {
+app.command("/echo-summary", async ({ command, ack }) => {
   await ack();
 
   const args = command.text.trim().toLowerCase().split(" ");
@@ -40,36 +40,39 @@ app.command("/echo-summary", async ({ command, ack, respond }) => {
   }
 
   try {
+    const placeholder = await app.client.chat.postMessage({
+      channel: command.channel_id,
+      text: ` *Reading through ${label} to generate a summary...*`,
+    });
+
     const result = await app.client.conversations.history(options);
 
     if (!result.messages || result.messages.length === 0) {
-      return await respond(`No messages found for ${label}. Keep it chill!`);
+      await app.client.chat.delete({
+        channel: command.channel_id,
+        ts: placeholder.ts,
+      });
+      await app.client.chat.postMessage({
+        channel: command.channel_id,
+        text: `No messages found for ${label}. Keep it chill!`,
+      });
+      return;
     }
 
     // Cache user info to avoid duplicate API calls
     const nameMap = {};
-
     // Build a detailed conversation with metadata
     const conversationLines = [];
-
     // Sort messages chronologically (API returns newest-first)
-    const sortedMessages = result.messages
-      .filter((m) => !m.bot_id) // Exclude bot messages
-      .reverse();
+    const sortedMessages = result.messages.filter((m) => !m.bot_id).reverse();
 
     for (const msg of sortedMessages) {
       // Fetch user name once and cache it
       if (!nameMap[msg.user]) {
         nameMap[msg.user] = await getCachedUserName(app, msg.user);
       }
-
       const msgUserName = nameMap[msg.user];
-
-      // CRITICAL FIX: Resolve user mentions in the message text
-      // Slack returns <@U123ABC> format; convert to @RealName so AI sees names not IDs
       const resolvedText = resolveUserMentions(msg.text, nameMap);
-
-      // Format the conversation line
       let line = formatConversationLine(msgUserName, resolvedText, msg.ts);
 
       // If the message has reactions, add them for context
@@ -77,12 +80,10 @@ app.command("/echo-summary", async ({ command, ack, respond }) => {
         const reactionEmojis = msg.reactions.map((r) => r.name).join(" ");
         line += ` (reactions: ${reactionEmojis})`;
       }
-
       // If this is a reply to someone, note that
       if (msg.thread_ts && msg.thread_ts !== msg.ts) {
         line += ` [in thread]`;
       }
-
       conversationLines.push(line);
     }
 
@@ -124,13 +125,21 @@ Start the summary now:
       "google/gemini-2.5-flash",
     );
 
-    await respond({
-      text: `*${userName}:* /echo-summary ${args.join(" ")}\n\n*Echo Summary (${label}):*\n\n${summary}`,
+    await app.client.chat.delete({
+      channel: command.channel_id,
+      ts: placeholder.ts,
+    });
+
+    await app.client.chat.postMessage({
+      channel: command.channel_id,
+      text: `*Echo Summary (${label}):*\n\n${summary}`,
     });
   } catch (error) {
     console.error("[Echo] /echo-summary failed:", error);
-    await respond(
-      "I had trouble reading the history. Is the Echo bot invited to this channel?",
-    );
+    await app.client.chat.postEphemeral({
+      channel: command.channel_id,
+      user: command.user_id,
+      text: "I had trouble reading the history. Is the Echo bot invited to this channel?",
+    });
   }
 });

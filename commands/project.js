@@ -2,27 +2,38 @@ const app = require("../app");
 const { getAIResponse, ECHO_PERSONALITY } = require("../services/ai");
 const { getProjectData } = require("../services/projectData");
 
-app.command("/echo-project", async ({ command, ack, respond }) => {
+app.command("/echo-project", async ({ command, ack }) => {
   await ack();
 
   const projectName = command.text.trim();
-  if (!projectName)
-    return await respond("Hmm... which project? Try `/echo-project amadeus`.");
-
-  await respond({
-    response_type: "in_channel",
-    text: `*Echo is gathering info on "${projectName}"...*`,
-  });
+  if (!projectName) {
+    await app.client.chat.postEphemeral({
+      channel: command.channel_id,
+      user: command.user_id,
+      text: "Hmm... which project? Try `/echo-project amadeus`.",
+    });
+    return;
+  }
 
   try {
+    const placeholder = await app.client.chat.postMessage({
+      channel: command.channel_id,
+      text: ` *Gathering info on "${projectName}"...*`,
+    });
+
     const data = await getProjectData(app, projectName, command.channel_id);
 
     if (!data.found) {
-      return await respond({
-        response_type: "in_channel",
-        replace_original: true,
+      await app.client.chat.delete({
+        channel: command.channel_id,
+        ts: placeholder.ts,
+      });
+      await app.client.chat.postEphemeral({
+        channel: command.channel_id,
+        user: command.user_id,
         text: `❌ ${data.error}`,
       });
+      return;
     }
 
     const analysisPrompt = `
@@ -45,10 +56,10 @@ REPORT INSTRUCTIONS:
 4. **Format:** Use Bold Headers, clean bullet points, and a friendly but professional tone.
 
 STRUCTURE:
-### 🚀 Project Overview
-### 📈 Current Status
-### 👥 Team & Roles
-### 🔗 Related Projects & Context
+### Project Overview
+### Current Status
+### Team & Roles
+### Related Projects & Context
     `.trim();
 
     const report = await getAIResponse(
@@ -56,12 +67,20 @@ STRUCTURE:
       ECHO_PERSONALITY + " Be analytical, clear, and highly organized.",
     );
 
-    await respond({
-      response_type: "in_channel",
-      replace_original: true,
+    await app.client.chat.delete({
+      channel: command.channel_id,
+      ts: placeholder.ts,
+    });
+
+    await app.client.chat.postMessage({
+      channel: command.channel_id,
       text: `*PROJECT REPORT: ${projectName}*\n\n${report}\n\n_Source: #${data.channelName}_`,
     });
   } catch (err) {
-    await respond(`Ugh, something went wrong: ${err.message}`);
+    await app.client.chat.postEphemeral({
+      channel: command.channel_id,
+      user: command.user_id,
+      text: `Ugh, something went wrong: ${err.message}`,
+    });
   }
 });
