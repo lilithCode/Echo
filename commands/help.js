@@ -28,11 +28,6 @@ app.command("/echo-help", async ({ ack, respond }) => {
 • /echo-docs <query>
   Search technical documentation, APIs, and project docs.
 
-*Music*
-• /echo-music <playlist-name>
-  Play a random song from the specified playlist. 
-  Available playlists: chill, anime, lowlife
-
 *Help*
 • /echo-help
   Show all available commands.`,
