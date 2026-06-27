@@ -2,11 +2,20 @@
 
 > An AI Slack bot that answers questions, searches the web, summarizes conversations, and helps teams understand their projects.
 
+
 <div align="center">
 
 ![Slack](https://img.shields.io/badge/Slack-Bot-4A154B?style=for-the-badge&logo=slack)
 ![Node.js](https://img.shields.io/badge/Node.js-v14+-339933?style=for-the-badge&logo=nodedotjs)
 
+
+
+<p align="center">
+   <img src="public/readme/logo.png" alt="Echo logo" width="270" />
+   <br />
+   <img src="public/readme/ask.jpg" alt="Slack response - ask" style="max-width:100%;margin:8px;" />
+   <img src="public/readme/search.jpg" alt="Slack response - search" style="max-width:100%;margin:8px;" />
+</p>
 
 **[Features](#-features) • [Installation](#-installation) • [Commands](#-commands) • [Configuration](#-configuration) • [Contributing](#-contributing)**
 
