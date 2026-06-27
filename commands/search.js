@@ -7,28 +7,24 @@ app.command("/echo-search", async ({ command, ack, respond }) => {
   await ack();
 
   const query = command.text.trim();
-  if (!query)
-    return await respond("You need to give me a topic to search.");
+  if (!query) return await respond("Hmm... give me a topic to search.");
 
   const userInfo = await app.client.users.info({ user: command.user_id });
   const userName = getSlackDisplayName(userInfo.user);
 
   try {
-    const loadingMsg = await app.client.chat.postMessage({
-      channel: command.channel_id,
-      text: `*${userName}:* ${query}\n\n *Searching the web...* `,
+    await respond({
+      response_type: "in_channel",
+      text: `*${userName}:* ${query}\n\n⏳ *Searching the web...*`,
     });
 
     const liveContext = await searchWeb(query);
 
     const prompt = `
-TODAY'S DATE: ${new Date().toDateString()}
 USER QUERY: ${query}
-
-REAL WEB SEARCH RESULTS (fetched live via Exa):
+SEARCH RESULTS:
 ${liveContext}
-
-INSTRUCTIONS: Use ONLY the search results above. Cite sources as markdown links [Title](URL). Be concise but informative. End with a cool closing.
+INSTRUCTIONS: Summarize findings. Use markdown links. Keep it cool.
     `.trim();
 
     const answer = await getAIResponse(
@@ -37,15 +33,16 @@ INSTRUCTIONS: Use ONLY the search results above. Cite sources as markdown links 
       "openai/gpt-4o",
     );
 
-    await app.client.chat.update({
-      channel: command.channel_id,
-      ts: loadingMsg.ts,
-      text: `*${userName}:* ${query}\n\n*Echo:* ${answer.replace(/^\n+/, "")}`,
+    await respond({
+      response_type: "in_channel",
+      replace_original: true,
+      text: `*${userName}:* ${query}\n\n*Echo:* ${answer}`,
     });
   } catch (error) {
     console.error("[Echo] /echo-search failed:", error.message);
-    await respond(
-      "...Eh, my web search is down right now",
-    );
+    await respond({
+      text: "Eh... my web search is acting up. Maybe try again later?",
+      replace_original: false,
+    });
   }
 });

@@ -1,144 +1,116 @@
+const { getCachedUserName } = require("./utils");
+
 /**
- * Project Data Fetching Service (IMPROVED)
+ * Project Data Fetching Service (V3 - SMART SEARCH & NAME RESOLUTION)
  */
 
-async function findProjectChannels(app, projectName) {
+async function findProjectChannels(app, projectName, currentChannelId) {
+  const projectNameLower = projectName.toLowerCase();
+  const targetName = projectNameLower.replace(/\s+/g, "-");
+
   try {
-    // FIX: Added 'public_channel,private_channel' to types
-    // Note: Bot can only see private channels it is already invited to.
+    // 1. Get list of channels the bot is actually in
     const result = await app.client.conversations.list({
-      limit: 1000,
-      exclude_archived: true,
       types: "public_channel,private_channel",
+      limit: 1000,
     });
+    const channels = result.channels.filter((c) => c.is_member);
 
-    const channels = result.channels;
-    const projectNameLower = projectName.toLowerCase();
-    const channelName = projectName.toLowerCase().replace(/\s+/g, "-");
-
-    // Strategy 1: Exact or partial channel name match
-    let projectChannel = channels.find(
-      (c) =>
-        c.name === channelName ||
-        c.name === projectNameLower ||
-        c.name.includes(projectNameLower),
+    // Strategy A: Exact Name Match (Best)
+    let match = channels.find(
+      (c) => c.name === targetName || c.name === projectNameLower,
     );
+    if (match) return { id: match.id, name: match.name, type: "dedicated" };
 
-    if (projectChannel) {
-      // If it's a public channel and we aren't in it, try to join
-      if (projectChannel.is_channel && !projectChannel.is_member) {
-        try {
-          await app.client.conversations.join({ channel: projectChannel.id });
-        } catch (e) {
-          console.log(
-            `[Echo] Could not join public channel ${projectChannel.name}: ${e.message}`,
-          );
-        }
-      }
+    // Strategy B: Topic/Purpose Match
+    match = channels.find(
+      (c) =>
+        (c.topic?.value || "").toLowerCase().includes(projectNameLower) ||
+        (c.purpose?.value || "").toLowerCase().includes(projectNameLower),
+    );
+    if (match) return { id: match.id, name: match.name, type: "contextual" };
 
-      return {
-        type: "dedicated_channel",
-        channel: projectChannel,
-        id: projectChannel.id,
-        name: projectChannel.name,
-      };
-    }
-
-    // Strategy 2: Search messages in channels the bot IS a member of
-    // Brute-forcing every channel is slow and hits rate limits, so we only check where we are present
-    const memberChannels = channels.filter((c) => c.is_member);
-
-    for (const channel of memberChannels) {
-      try {
-        const history = await app.client.conversations.history({
-          channel: channel.id,
-          limit: 30,
+    // Strategy C: Search current channel history for mentions (The Fallback)
+    try {
+      const history = await app.client.conversations.history({
+        channel: currentChannelId,
+        limit: 50,
+      });
+      const hasMention = history.messages.some(
+        (m) => m.text && m.text.toLowerCase().includes(projectNameLower),
+      );
+      if (hasMention) {
+        const info = await app.client.conversations.info({
+          channel: currentChannelId,
         });
-
-        const hasMention = history.messages.some(
-          (msg) =>
-            msg.text && msg.text.toLowerCase().includes(projectNameLower),
-        );
-
-        if (hasMention) {
-          return {
-            type: "project_mention_channel",
-            channel,
-            id: channel.id,
-            name: channel.name,
-          };
-        }
-      } catch (err) {
-        continue; // Skip restricted channels
+        return {
+          id: currentChannelId,
+          name: info.channel.name,
+          type: "mention_fallback",
+        };
       }
-    }
+    } catch (e) {}
 
     return null;
   } catch (err) {
-    console.error("[Echo] findProjectChannels error:", err.message);
+    console.error("[Echo] Project discovery error:", err.message);
     return null;
   }
 }
 
-async function getProjectData(app, projectName) {
+async function getProjectData(app, projectName, currentChannelId) {
+  const channel = await findProjectChannels(app, projectName, currentChannelId);
+
+  if (!channel) {
+    return {
+      found: false,
+      error: `I couldn't find a channel named #${projectName.toLowerCase().replace(/\s+/g, "-")} or any recent mentions of "${projectName}".\n\n💡 *Tip:* If the project is private, make sure to invite me using \`/invite @Echo\`!`,
+    };
+  }
+
   try {
-    const channelResult = await findProjectChannels(app, projectName);
+    const [history, info, pinsRes] = await Promise.all([
+      app.client.conversations.history({ channel: channel.id, limit: 100 }),
+      app.client.conversations.info({ channel: channel.id }),
+      app.client.pins
+        .list({ channel: channel.id })
+        .catch(() => ({ items: [] })),
+    ]);
 
-    if (!channelResult) {
-      return {
-        found: false,
-        projectName,
-        error: `I couldn't find a channel for "${projectName}". 
-        
-If it's a private channel, please invite me first by typing \`/invite @Echo\` inside that channel!`,
-      };
-    }
-
-    const channelId = channelResult.id;
-
-    // Fetch History
-    const history = await app.client.conversations.history({
-      channel: channelId,
-      limit: 100,
-    });
-
-    // Fetch Pinned Messages
-    let pinnedText = "";
-    try {
-      const pins = await app.client.conversations.getPinnedMessages({
-        channel: channelId,
-      });
-      pinnedText = (pins.messages || []).map((m) => m.text).join("\n---\n");
-    } catch (e) {}
-
-    // Fetch Channel Info (Topic/Purpose)
-    const info = await app.client.conversations.info({ channel: channelId });
-
-    // Process messages with user names
+    // FIX 1: Resolve User IDs to Real Names
     const processedMessages = [];
-    for (const msg of (history.messages || []).reverse()) {
-      if (msg.bot_id || !msg.text) continue;
+    for (const m of (history.messages || []).reverse()) {
+      if (m.bot_id || !m.text) continue;
+
+      const realName = await getCachedUserName(app, m.user);
       processedMessages.push(
-        `[${new Date(msg.ts * 1000).toLocaleTimeString()}] User ${msg.user}: ${msg.text}`,
+        `[${new Date(m.ts * 1000).toLocaleTimeString()}] ${realName}: ${m.text}`,
       );
     }
+
+    const pinnedText = (pinsRes.items || [])
+      .filter((item) => item.type === "message")
+      .map((item) => item.message.text)
+      .join("\n---\n");
 
     return {
       found: true,
       projectName,
-      channelId,
-      channelName: channelResult.name,
-      channelType: channelResult.type,
+      channelName: channel.name,
+      matchType: channel.type,
       description:
         info.channel.topic?.value ||
         info.channel.purpose?.value ||
-        "No description",
-      pinnedMessages: pinnedText,
-      conversationHistory: processedMessages.join("\n"),
-      messageCount: history.messages?.length || 0,
+        "No description set",
+      pinnedMessages: pinnedText || "No pinned briefs found.",
+      conversationHistory:
+        processedMessages.join("\n") || "No conversation history found.",
     };
   } catch (err) {
-    return { found: false, error: err.message };
+    return {
+      found: false,
+      error: `Slack Permission Error: ${err.data?.error || err.message}`,
+    };
   }
 }
 
