@@ -23,7 +23,7 @@ app.command("/echo-help", async ({ ack, respond }) => {
 
 *Projects & Documentation*
 • /echo-project <project-name>
-  Retrieve project details, architecture, tasks, and discussions.
+  Retrieve project details, architecture, tasks, and discussions on slack chats.
 
 • /echo-docs <query>
   Search technical documentation, APIs, and project docs.
