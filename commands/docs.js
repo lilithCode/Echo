@@ -10,7 +10,7 @@ app.command("/echo-docs", async ({ command, ack }) => {
     await app.client.chat.postEphemeral({
       channel: command.channel_id,
       user: command.user_id,
-      text: "Hmm... You didn't tell me what to look up.",
+      text: "Hmm... You didn't tell me what to look up. Try `/echo-docs nextjs app router`",
     });
     return;
   }
@@ -29,7 +29,9 @@ app.command("/echo-docs", async ({ command, ack }) => {
     const sourceList =
       sources.length > 0
         ? "\n\n*Sources:*\n" +
-          sources.map((s) => `• [${s.title}](${s.url})`).join("\n")
+          sources
+            .map((s) => `• <${s.url}|${s.title || "Documentation Link"}>`)
+            .join("\n")
         : "";
 
     await app.client.chat.delete({
@@ -42,10 +44,11 @@ app.command("/echo-docs", async ({ command, ack }) => {
       text: `*${userName} requested docs for:* ${query}\n\n*Echo:*\n\n${answer}${sourceList}`,
     });
   } catch (error) {
+    console.error("[Echo] /echo-docs failed:", error.message);
     await app.client.chat.postEphemeral({
       channel: command.channel_id,
       user: command.user_id,
-      text: "Eh... I couldn't search the docs right now.",
+      text: "Eh... I couldn't search the docs right now. Check my console logs for details.",
     });
   }
 });
