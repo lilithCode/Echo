@@ -21,6 +21,10 @@
 
 </div>
 
+## Tutorial Video
+
+Watch the walkthrough on YouTube: [Echo Tutorial Video](https://youtu.be/Wu7u665-Njo)
+
 ---
 
 ## Features
