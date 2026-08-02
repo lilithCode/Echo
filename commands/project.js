@@ -15,8 +15,9 @@ app.command("/echo-project", async ({ command, ack }) => {
     return;
   }
 
+  let placeholder;
   try {
-    const placeholder = await app.client.chat.postMessage({
+    placeholder = await app.client.chat.postMessage({
       channel: command.channel_id,
       text: ` *Gathering info on "${projectName}"...*`,
     });
@@ -77,6 +78,14 @@ STRUCTURE:
       text: `*PROJECT REPORT: ${projectName}*\n\n${report}\n\n_Source: #${data.channelName}_`,
     });
   } catch (err) {
+    console.error("[Echo] /echo-project failed:", err.message);
+
+    if (placeholder) {
+      await app.client.chat
+        .delete({ channel: command.channel_id, ts: placeholder.ts })
+        .catch(() => {});
+    }
+
     await app.client.chat.postEphemeral({
       channel: command.channel_id,
       user: command.user_id,

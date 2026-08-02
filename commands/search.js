@@ -16,11 +16,12 @@ app.command("/echo-search", async ({ command, ack }) => {
     return;
   }
 
-  const userInfo = await app.client.users.info({ user: command.user_id });
-  const userName = getSlackDisplayName(userInfo.user);
-
+  let placeholder;
   try {
-    const placeholder = await app.client.chat.postMessage({
+    const userInfo = await app.client.users.info({ user: command.user_id });
+    const userName = getSlackDisplayName(userInfo.user);
+
+    placeholder = await app.client.chat.postMessage({
       channel: command.channel_id,
       text: `*${userName} searched for:* ${query}\n\n *Searching the web...*`,
     });
@@ -51,6 +52,13 @@ INSTRUCTIONS: Summarize findings. Use markdown links. Keep it cool.
     });
   } catch (error) {
     console.error("[Echo] /echo-search failed:", error.message);
+
+    if (placeholder) {
+      await app.client.chat
+        .delete({ channel: command.channel_id, ts: placeholder.ts })
+        .catch(() => {});
+    }
+
     await app.client.chat.postEphemeral({
       channel: command.channel_id,
       user: command.user_id,

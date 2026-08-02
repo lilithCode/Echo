@@ -15,11 +15,12 @@ app.command("/echo-docs", async ({ command, ack }) => {
     return;
   }
 
-  const userInfo = await app.client.users.info({ user: command.user_id });
-  const userName = getSlackDisplayName(userInfo.user);
-
+  let placeholder;
   try {
-    const placeholder = await app.client.chat.postMessage({
+    const userInfo = await app.client.users.info({ user: command.user_id });
+    const userName = getSlackDisplayName(userInfo.user);
+
+    placeholder = await app.client.chat.postMessage({
       channel: command.channel_id,
       text: `*${userName} requested docs for:* ${query}\n\n *Looking through official documentation...*`,
     });
@@ -45,6 +46,13 @@ app.command("/echo-docs", async ({ command, ack }) => {
     });
   } catch (error) {
     console.error("[Echo] /echo-docs failed:", error.message);
+
+    if (placeholder) {
+      await app.client.chat
+        .delete({ channel: command.channel_id, ts: placeholder.ts })
+        .catch(() => {});
+    }
+
     await app.client.chat.postEphemeral({
       channel: command.channel_id,
       user: command.user_id,

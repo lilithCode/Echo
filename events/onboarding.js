@@ -1,5 +1,18 @@
 const app = require("../app");
 
+const WELCOME_TEXT =
+  "Tuturu! I'm Echo, your AI teammate in Slack.\n\nI know you're busy, so I'll help you with your work.\n\n*Here's the deal:*\n• Ask me anything (I'll have the answer in 2 sec)\n• Tell me to search (I'll find the best sources online)\n• Search the docs (I'll look into the lastest documentation online)\n• Ask me about your project (I'll gather information about it on slack)\n• Ask me to summarize (I'll make a short summary of Slack msgs)\n\n Type `/echo-help`for more details :)";
+
+// Echo's own user ID never changes, so fetch it once and cache it instead
+// of calling auth.test() on every single member_joined_channel event.
+let cachedBotUserId = null;
+async function getBotUserId(client) {
+  if (cachedBotUserId) return cachedBotUserId;
+  const { user_id } = await client.auth.test();
+  cachedBotUserId = user_id;
+  return cachedBotUserId;
+}
+
 app.event("app_home_opened", async ({ event, client }) => {
   try {
     await client.views.publish({
@@ -14,7 +27,7 @@ app.event("app_home_opened", async ({ event, client }) => {
           {
             type: "section",
             text: {
-              text: "Tuturu! I'm Echo, your AI teammate in Slack.\n\nI know you're busy, so I'll help you with your work.\n\n*Here's the deal:*\n• Ask me anything (I'll have the answer in 2 sec)\n• Tell me to search (I'll find the best sources online)\n• Search the docs (I'll look into the lastest documentation online)\n• Ask me about your project (I'll gather information about it on slack)\n• Ask me to summarize (I'll make a short summary of Slack msgs)\n\n Type `/echo-help`for more details :)",
+              text: WELCOME_TEXT,
             },
           },
           { type: "divider" },
@@ -36,15 +49,15 @@ app.event("app_home_opened", async ({ event, client }) => {
   }
 });
 
-//Send a welcome message when the bot is added to a channel
+// Send a welcome message when the bot is added to a channel
 app.event("member_joined_channel", async ({ event, client }) => {
   try {
-    // Only speak if the person joining is Echo 
-    const botId = await client.auth.test();
-    if (event.user === botId.user_id) {
+    const botUserId = await getBotUserId(client);
+    // Only speak if the person joining is Echo itself
+    if (event.user === botUserId) {
       await client.chat.postMessage({
         channel: event.channel,
-        text: "Tuturu! I'm Echo, your AI teammate in Slack.\n\nI know you're busy, so I'll help you with your work.\n\n*Here's the deal:*\n• Ask me anything (I'll have the answer in 2 sec)\n• Tell me to search (I'll find the best sources online)\n• Search the docs (I'll look into the lastest documentation online)\n• Ask me about your project (I'll gather information about it on slack)\n• Ask me to summarize (I'll make a short summary of Slack msgs)\n\n Type `/echo-help`for more details :)",
+        text: WELCOME_TEXT,
       });
     }
   } catch (error) {

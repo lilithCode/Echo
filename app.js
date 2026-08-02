@@ -9,4 +9,8 @@ const app = new App({
   customRoutes: [],
 });
 
+app.error(async (error) => {
+  console.error("[Echo] Unhandled Bolt error:", error);
+});
+
 module.exports = app;

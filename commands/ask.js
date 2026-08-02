@@ -17,19 +17,20 @@ app.command("/echo-ask", async ({ command, ack }) => {
     return;
   }
 
+  let placeholder;
   try {
     const userInfo = await app.client.users.info({ user: command.user_id });
     const userName = getSlackDisplayName(userInfo.user);
 
     // Post the placeholder and grab its timestamp
-    const placeholder = await app.client.chat.postMessage({
+    placeholder = await app.client.chat.postMessage({
       channel: command.channel_id,
       text: `*${userName} asked:* ${question}\n\n *Echo is thinking...*`,
     });
 
     const answer = await getAIResponse(question);
 
-    // Delete the placeholder, then post the final answer 
+    // Delete the placeholder, then post the final answer
     await app.client.chat.delete({
       channel: command.channel_id,
       ts: placeholder.ts,
@@ -41,6 +42,13 @@ app.command("/echo-ask", async ({ command, ack }) => {
     });
   } catch (err) {
     console.error("[Echo] /echo-ask failed:", err.message);
+
+    if (placeholder) {
+      await app.client.chat
+        .delete({ channel: command.channel_id, ts: placeholder.ts })
+        .catch(() => {});
+    }
+
     await app.client.chat.postEphemeral({
       channel: command.channel_id,
       user: command.user_id,

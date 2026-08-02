@@ -60,6 +60,7 @@ Watch the walkthrough on YouTube: [Echo Tutorial Video](https://youtu.be/Wu7u665
 
 3. **Set up environment variables**
    ```bash
+   cp .env.example .env
    nano .env
    ```
    
@@ -196,7 +197,7 @@ Display all available commands and their usage.
 
 ### Environment Variables
 
-Create a `.env` file in the project root with the following variables:
+Create a `.env` file in the project root (see `.env.example`) with the following variables:
 
 ```env
 # Slack Tokens (Get from Slack App Dashboard)

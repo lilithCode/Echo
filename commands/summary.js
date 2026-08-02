@@ -1,7 +1,6 @@
 const app = require("../app");
 const { getAIResponse, ECHO_PERSONALITY } = require("../services/ai");
 const {
-  getSlackDisplayName,
   getCachedUserName,
   resolveUserMentions,
   formatConversationLine,
@@ -12,9 +11,6 @@ app.command("/echo-summary", async ({ command, ack }) => {
 
   const args = command.text.trim().toLowerCase().split(" ");
   const type = args[0] || "last";
-
-  const userInfo = await app.client.users.info({ user: command.user_id });
-  const userName = getSlackDisplayName(userInfo.user);
 
   let options = { channel: command.channel_id, limit: 100 };
   let label = "recent history";
@@ -39,8 +35,11 @@ app.command("/echo-summary", async ({ command, ack }) => {
     label = "unread/recent discussions";
   }
 
+  let placeholder;
   try {
-    const placeholder = await app.client.chat.postMessage({
+    // Note: unlike the other commands, this one never displays the
+    // requester's name, so we skip the users.info call entirely here.
+    placeholder = await app.client.chat.postMessage({
       channel: command.channel_id,
       text: ` *Reading through ${label} to generate a summary...*`,
     });
@@ -136,6 +135,13 @@ Start the summary now:
     });
   } catch (error) {
     console.error("[Echo] /echo-summary failed:", error);
+
+    if (placeholder) {
+      await app.client.chat
+        .delete({ channel: command.channel_id, ts: placeholder.ts })
+        .catch(() => {});
+    }
+
     await app.client.chat.postEphemeral({
       channel: command.channel_id,
       user: command.user_id,
